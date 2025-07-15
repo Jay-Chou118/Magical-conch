@@ -282,7 +282,8 @@ inline void addAmplitudeSmooth(
 }
 
 int getECCBytesForLength(int len) {
-    return len < 4 ? 2 : GG_MAX(4, 2*(len/5));
+    // return len < 4 ? 2 : GG_MAX(4, 2*(len/5));
+     return GG_MAX(8, len / 4); // 将ECC字节从默认4字节增加到8字节或长度的1/4
 }
 
 int bytesForSampleFormat(GGWave::SampleFormat sampleFormat) {
@@ -492,7 +493,8 @@ bool GGWave::prepare(const Parameters & parameters, bool allocate) {
     m_nBitsInMarker        = 16;
     m_nMarkerFrames        = parameters.payloadLength > 0 ? 0 : kDefaultMarkerFrames;
     m_encodedDataOffset    = parameters.payloadLength > 0 ? 0 : kDefaultEncodedDataOffset;
-    m_soundMarkerThreshold = parameters.soundMarkerThreshold;
+    // m_soundMarkerThreshold = parameters.soundMarkerThreshold;
+     m_soundMarkerThreshold = parameters.soundMarkerThreshold > 0 ? parameters.soundMarkerThreshold : 2.0f; // 从3.0f降低到2.0f
     m_isFixedPayloadLength = parameters.payloadLength > 0;
     m_payloadLength        = parameters.payloadLength;
     m_isRxEnabled          = parameters.operatingMode & GGWAVE_OPERATING_MODE_RX;

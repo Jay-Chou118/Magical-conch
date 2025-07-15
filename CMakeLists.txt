@@ -15,24 +15,47 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
-# 查找依赖库
-find_library(PORTAUDIO_LIBRARY NAMES portaudio)
-find_path(SDL2_INCLUDE_DIR SDL.h HINTS /opt/homebrew/include/SDL2)
-find_library(SDL2_LIBRARY NAMES SDL2 HINTS /opt/homebrew/lib)
+# 跨平台依赖查找
+if(ANDROID)
+    # Android特定配置
+    find_library(PORTAUDIO_LIBRARY portaudio)
+    find_library(SDL2_LIBRARY SDL2)
+    find_library(LOG_LIBRARY log)
+elseif(UNIX AND NOT APPLE)
+    # Linux配置
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(PORTAUDIO REQUIRED portaudio-2.0)
+    pkg_check_modules(SDL2 REQUIRED sdl2)
+    include_directories(${PORTAUDIO_INCLUDE_DIRS} ${SDL2_INCLUDE_DIRS})
+elseif(APPLE)
+    # macOS配置
+    find_library(PORTAUDIO_LIBRARY NAMES portaudio)
+    find_path(SDL2_INCLUDE_DIR SDL.h HINTS /opt/homebrew/include/SDL2 /usr/local/include/SDL2)
+    find_library(SDL2_LIBRARY NAMES SDL2 HINTS /opt/homebrew/lib /usr/local/lib)
+    # 添加这一行，确保SDL2头文件目录被包含
+    include_directories(${SDL2_INCLUDE_DIR})
+elseif(WIN32)
+    # Windows配置
+    find_path(PORTAUDIO_INCLUDE_DIR portaudio.h HINTS "C:/Program Files/PortAudio/include")
+    find_library(PORTAUDIO_LIBRARY portaudio_x64.lib HINTS "C:/Program Files/PortAudio/lib")
+    find_path(SDL2_INCLUDE_DIR SDL.h HINTS "C:/Program Files/SDL2/include/SDL2")
+    find_library(SDL2_LIBRARY SDL2.lib HINTS "C:/Program Files/SDL2/lib/x64")
+    include_directories(${PORTAUDIO_INCLUDE_DIR} ${SDL2_INCLUDE_DIR})
+endif()
+
 find_library(MATH_LIBRARY m)
 
 # 检查依赖
 if(NOT PORTAUDIO_LIBRARY)
-    message(FATAL_ERROR "PortAudio library not found. Install with: brew install portaudio")
+    message(FATAL_ERROR "PortAudio library not found. Please install PortAudio development files.")
 endif()
-if(NOT SDL2_INCLUDE_DIR OR NOT SDL2_LIBRARY)
-    message(FATAL_ERROR "SDL2 not found. Install with: brew install sdl2")
+if(NOT SDL2_LIBRARY)
+    message(FATAL_ERROR "SDL2 library not found. Please install SDL2 development files.")
 endif()
 
 # 包含头文件目录
 include_directories(
     include
-    /opt/homebrew/include
     ${SDL2_INCLUDE_DIR}
     src/reed-solomon
 )
@@ -43,27 +66,40 @@ set(SOURCES
     src/ggwave-common.cpp
     src/ggwave.cpp
     src/main.cpp
-    # 添加Reed-Solomon源文件（如果有实现文件）
     src/reed-solomon/rs.hpp
 )
 
 # 创建可执行文件
 add_executable(magical-conch ${SOURCES})
 
-# 链接库
-target_link_libraries(magical-conch
-    ${PORTAUDIO_LIBRARY}
-    ${SDL2_LIBRARY}
-    ${MATH_LIBRARY}
-)
-
-# Apple特定框架
-if(APPLE)
+# 跨平台链接
+if(ANDROID)
     target_link_libraries(magical-conch
+        ${PORTAUDIO_LIBRARY}
+        ${SDL2_LIBRARY}
+        ${LOG_LIBRARY}
+    )
+elseif(UNIX AND NOT APPLE)
+    target_link_libraries(magical-conch
+        ${PORTAUDIO_LIBRARIES}
+        ${SDL2_LIBRARIES}
+        ${MATH_LIBRARY}
+    )
+elseif(APPLE)
+    target_link_libraries(magical-conch
+        ${PORTAUDIO_LIBRARY}
+        ${SDL2_LIBRARY}
+        ${MATH_LIBRARY}
         "-framework CoreAudio"
         "-framework AudioToolbox"
         "-framework AudioUnit"
         "-framework Carbon"
+    )
+elseif(WIN32)
+    target_link_libraries(magical-conch
+        ${PORTAUDIO_LIBRARY}
+        ${SDL2_LIBRARY}
+        winmm
     )
 endif()
 
