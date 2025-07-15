@@ -1,118 +1,123 @@
 #include "ggwave.h"
-#include <portaudio.h>
+
+#include "ggwave-common.h"
+#include "ggwave-common-sdl2.h"
+
+#include <SDL.h>
+
+#include <cstdio>
+#include <string>
+
+#include <mutex>
+#include <thread>
 #include <iostream>
-#include <cstring>
 
-// GGWave实例句柄
-static ggwave_Instance ggwaveInstance = -1;
+// 添加全局退出标志
+std::atomic<bool> g_running(true);
 
-// 音频流回调函数
-static int audioCallback(const void* inputBuffer, void* outputBuffer,
-                         unsigned long framesPerBuffer,
-                         const PaStreamCallbackTimeInfo* timeInfo,
-                         PaStreamCallbackFlags statusFlags,
-                         void* userData) {
-    (void)outputBuffer; // 未使用输出
-    (void)timeInfo;     // 未使用时间信息
-    (void)statusFlags;  // 未使用状态标志
-    (void)userData;     // 未使用用户数据
-    // std::cout << "11111"  << std::endl;
-    // 检查输入数据是否有数据
-    if (inputBuffer == nullptr || ggwaveInstance == -1) {
-        std::cout << "未检测到麦克风输入数据\n";
-        return paContinue;
+// 信号处理函数
+void signalHandler(int signum) {
+    if (signum == SIGINT) {
+        printf("\nReceived Ctrl+C, exiting...\n");
+        g_running = false;
     }
-
-    // 调用ggwave解码音频数据
-    // 注意：根据实际样本格式调整此处的处理
-    int decodedLength = ggwave_decode(ggwaveInstance, inputBuffer, framesPerBuffer * sizeof(int16_t), nullptr);
-
-    // 添加调试输出
-    if (decodedLength > 0) {
-        std::cout << "\n成功解码! 长度: " << decodedLength << "字节\n";
-    } else if (decodedLength == 0) {
-        // 仅在需要详细调试时启用此行
-        // std::cout << "未检测到有效信号\n";
-    } else {
-        std::cout << "解码错误! 错误码: " << decodedLength << "\n";
-    }
-
-    return paContinue;
 }
 
-int main() {
-    std::cout << "Magical Conch 声音监听程序\n";
 
-    // 初始化PortAudio
-    PaError err = Pa_Initialize();
-    if (err != paNoError) {
-        std::cerr << "PortAudio初始化失败: " << Pa_GetErrorText(err) << std::endl;
-        return 1;
+int main(int argc, char** argv) {
+
+    signal(SIGINT, signalHandler);
+    printf("Usage: %s [-cN] [-pN] [-tN] [-lN]\n", argv[0]);
+    printf("    -cN - select capture device N\n");
+    printf("    -pN - select playback device N\n");
+    printf("    -tN - transmission protocol\n");
+    printf("    -lN - fixed payload length of size N, N in [1, %d]\n", GGWave::kMaxLengthFixed);
+    printf("    -d  - use Direct Sequence Spread (DSS)\n");
+    printf("    -v  - print generated tones on resend\n");
+    printf("\n");
+
+    const auto argm          = parseCmdArguments(argc, argv);
+    const int  captureId     = argm.count("c") == 0 ?  0 : std::stoi(argm.at("c"));
+    const int  playbackId    = argm.count("p") == 0 ?  0 : std::stoi(argm.at("p"));
+    const int  txProtocolId  = argm.count("t") == 0 ?  1 : std::stoi(argm.at("t"));
+    const int  payloadLength = argm.count("l") == 0 ? -1 : std::stoi(argm.at("l"));
+    const bool useDSS        = argm.count("d") >  0;
+    const bool printTones    = argm.count("v") >  0;
+
+    if (GGWave_init(playbackId, captureId, payloadLength, 0.0f, useDSS) == false) {
+        fprintf(stderr, "Failed to initialize GGWave\n");
+        return -1;
     }
 
-    try {
-        // 获取GGWave默认参数
-        ggwave_Parameters params = ggwave_getDefaultParameters();
-        params.operatingMode = GGWAVE_OPERATING_MODE_RX; // 设置为接收模式
-        // 显式设置采样率（如果发送端使用不同值）
-        // params.sampleRate = 44100;
-        // params.sampleRateInp = 44100;
+    auto ggWave = GGWave_instance();
 
-        // 初始化GGWave实例
-        ggwaveInstance = ggwave_init(params);
-        if (ggwaveInstance == -1) {
-            throw std::runtime_error("GGWave初始化失败");
+    printf("Available Tx protocols:\n");
+    const auto & protocols = GGWave::Protocols::kDefault();
+    for (int i = 0; i < (int) protocols.size(); ++i) {
+        const auto & protocol = protocols[i];
+        if (protocol.enabled == false) {
+            continue;
         }
-
-        // 添加协议启用代码 - 启用可听范围正常协议
-        ggwave_rxToggleProtocol(GGWAVE_PROTOCOL_AUDIBLE_NORMAL, 1);
-        // 如果使用超声波协议，添加以下行
-        // ggwave_rxToggleProtocol(GGWAVE_PROTOCOL_ULTRASOUND_NORMAL, 1);
-        // 获取默认输入设备
-        PaDeviceIndex deviceIndex = Pa_GetDefaultInputDevice();
-        if (deviceIndex == paNoDevice) {
-            throw std::runtime_error("找不到默认麦克风设备");
-        }
-
-        // 配置音频流参数
-        PaStreamParameters inputParams;
-        inputParams.device = deviceIndex;
-        inputParams.channelCount = 1; // 单声道
-        inputParams.sampleFormat = paInt16; // 16位整数格式
-        inputParams.suggestedLatency = Pa_GetDeviceInfo(deviceIndex)->defaultLowInputLatency;
-        inputParams.hostApiSpecificStreamInfo = nullptr;
-
-        // 打开音频流
-        PaStream* stream;
-        err = Pa_OpenStream(&stream, &inputParams, nullptr, params.sampleRateInp, 256,
-                           paClipOff, audioCallback, nullptr);
-        if (err != paNoError) {
-            throw std::runtime_error("无法打开音频流: " + std::string(Pa_GetErrorText(err)));
-        }
-
-        // 启动音频流
-        err = Pa_StartStream(stream);
-        if (err != paNoError) {
-            Pa_CloseStream(stream);
-            throw std::runtime_error("无法启动音频流: " + std::string(Pa_GetErrorText(err)));
-        }
-
-        std::cout << "正在监听麦克风输入... (按Enter键停止)\n";
-        std::cin.get(); // 等待用户输入
-
-        // 停止并关闭音频流
-        Pa_StopStream(stream);
-        Pa_CloseStream(stream);
-    }
-    catch (const std::exception& e) {
-        std::cerr << "错误: " << e.what() << std::endl;
+        printf("      %d - %s\n", i, protocol.name);
     }
 
-    // 清理资源
-    if (ggwaveInstance != -1) {
-        ggwave_free(ggwaveInstance);
+    if (txProtocolId < 0) {
+        fprintf(stderr, "Unknown Tx protocol %d\n", txProtocolId);
+        return -3;
     }
-    Pa_Terminate();
+
+    printf("Selecting Tx protocol %d\n", txProtocolId);
+
+    std::mutex mutex;
+    std::thread inputThread([&]() {
+        std::string inputOld = "";
+        while (g_running) {
+            std::string input;
+            printf("Enter text: ");
+            fflush(stdout);
+            getline(std::cin, input);
+            if (input.empty()) {
+                printf("Re-sending ...\n");
+                input = inputOld;
+
+                if (printTones) {
+                    printf("Printing generated waveform tones (Hz):\n");
+                    const auto & protocol = protocols[txProtocolId];
+                    const auto tones = ggWave->txTones();
+                    for (int i = 0; i < (int) tones.size(); ++i) {
+                        if (tones[i] < 0) {
+                            printf(" - end tx\n");
+                            continue;
+                        }
+                        const auto freq_hz = (protocol.freqStart + tones[i])*ggWave->hzPerSample();
+                        printf(" - tone %3d: %f\n", i, freq_hz);
+                    }
+                }
+            } else {
+                printf("Sending ...\n");
+            }
+            {
+                std::lock_guard<std::mutex> lock(mutex);
+                ggWave->init(input.size(), input.data(), GGWave::TxProtocolId(txProtocolId), 10);
+            }
+            inputOld = input;
+        }
+    });
+
+    while (g_running) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            GGWave_mainLoop();
+        }
+    }
+
+    inputThread.join();
+
+    GGWave_deinit();
+
+    SDL_CloseAudio();
+    SDL_Quit();
 
     return 0;
 }
