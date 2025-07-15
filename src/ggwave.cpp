@@ -283,7 +283,7 @@ inline void addAmplitudeSmooth(
 
 int getECCBytesForLength(int len) {
     // return len < 4 ? 2 : GG_MAX(4, 2*(len/5));
-     return GG_MAX(8, len / 4); // 将ECC字节从默认4字节增加到8字节或长度的1/4
+     return GG_MAX(8,len / 4); // 将ECC字节从默认4字节增加到8字节或长度的1/4
 }
 
 int bytesForSampleFormat(GGWave::SampleFormat sampleFormat) {
