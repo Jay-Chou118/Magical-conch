@@ -205,27 +205,58 @@ int main(int argc, char** argv) {
                             fflush(stdout);
 
                                     if (waveform && actualSize > 0) {
-                                        printf("Step 6: Opening file for writing...\n");
-                                        fflush(stdout);
-                                        
-                                        std::ofstream file(saveFilename, std::ios::binary);
-                                        if (file.is_open()) {
-                                            printf("Step 7: Writing %u bytes to file...\n", actualSize);
-                                            fflush(stdout);
-                                            
-                                            file.write(static_cast<const char*>(waveform), actualSize);
-                                            file.close();
-                                            printf("✓ Saved waveform to file: %s (%u bytes)\n", saveFilename.c_str(), actualSize);
-                                            fflush(stdout);
-                                            
-                                            printf("Debug: First 20 bytes of waveform (hex): ");
-                                            const char* waveformBytes = static_cast<const char*>(waveform);
-                                            for (int i = 0; i < 20 && i < actualSize; i++) {
-                                                printf("%02x ", (unsigned char)waveformBytes[i]);
-                                            }
-                                            printf("\n");
-                                            fflush(stdout);
+    // ================= [新增] 自动增益归一化 (Auto Normalization) =================
+    // 这段代码会强制把音量拉满，彻底解决 t3 无法解码的问题
+    
+    // 1. 拷贝原始数据到可修改的 buffer
+    std::vector<int16_t> normalizedWaveform(actualSize / 2);
+    const int16_t* srcPtr = static_cast<const int16_t*>(waveform);
+    std::memcpy(normalizedWaveform.data(), srcPtr, actualSize);
 
+    // 2. 寻找当前最大峰值
+    int16_t maxVal = 0;
+    for (size_t i = 0; i < normalizedWaveform.size(); i++) {
+        if (std::abs(normalizedWaveform[i]) > maxVal) {
+            maxVal = std::abs(normalizedWaveform[i]);
+        }
+    }
+    printf("Debug: Peak amplitude before normalization: %d\n", maxVal);
+
+    // 3. 如果信号存在但太弱，就进行放大
+    if (maxVal > 0 && maxVal < 20000) { // 20000 是一个保守的安全阈值
+        float scale = 25000.0f / (float)maxVal; // 目标峰值 25000 (约 76% 音量)
+        printf("Debug: Applying gain factor: %.2f\n", scale);
+        
+        for (size_t i = 0; i < normalizedWaveform.size(); i++) {
+            normalizedWaveform[i] = static_cast<int16_t>(normalizedWaveform[i] * scale);
+        }
+    }
+
+    // 4. 更新指针，让后面的写入操作使用放大后的数据
+    const char* dataToWrite = reinterpret_cast<const char*>(normalizedWaveform.data());
+    // ==========================================================================
+
+    printf("Step 6: Opening file for writing...\n");
+    fflush(stdout);
+    
+    std::ofstream file(saveFilename, std::ios::binary);
+    if (file.is_open()) {
+        printf("Step 7: Writing %u bytes to file...\n", actualSize);
+        fflush(stdout);
+        
+        // 注意：这里改成 write(dataToWrite, ...)
+        file.write(dataToWrite, actualSize); 
+        file.close();
+        printf("✓ Saved normalized waveform to file: %s (%u bytes)\n", saveFilename.c_str(), actualSize);
+        fflush(stdout);
+        
+        // 打印新的 Hex 用于验证 (你会发现数值变大了，比如变成 30 00, A0 00 等)
+        printf("Debug: First 20 bytes of NORMALIZED waveform (hex): ");
+        for (int i = 0; i < 20 && i < actualSize; i++) {
+            printf("%02x ", (unsigned char)dataToWrite[i]);
+        }
+        printf("\n");
+        fflush(stdout);
                                     printf("Step 8: Opening file for reading...\n");
                                     fflush(stdout);
                                     
@@ -256,7 +287,7 @@ int main(int argc, char** argv) {
                                             parameters.sampleRateOut = 44100.0f;
                                             parameters.sampleRate = 44100.0f;
                                             parameters.samplesPerFrame = 1024;
-                                            parameters.soundMarkerThreshold = 3.0f;
+                                            parameters.soundMarkerThreshold = 1.0f;
                                             parameters.sampleFormatInp = GGWave::SampleFormat::GGWAVE_SAMPLE_FORMAT_I16;
                                             parameters.sampleFormatOut = GGWave::SampleFormat::GGWAVE_SAMPLE_FORMAT_I16;
                                             ggWaveDecode = std::make_shared<GGWave>(parameters);
