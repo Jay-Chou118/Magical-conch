@@ -9,6 +9,8 @@
 #include <string>
 #include <fstream>
 #include <vector>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 #include <mutex>
 #include <thread>
@@ -56,6 +58,17 @@ int main(int argc, char** argv) {
 
     printf("Debug: saveToFile = %d, saveFilename = '%s'\n", saveToFile, saveFilename.c_str());
     printf("Debug: loadFromFile = %d, loadFilename = '%s'\n", loadFromFile, loadFilename.c_str());
+
+    if (saveToFile || loadFromFile) {
+        struct stat st;
+        if (stat("output", &st) != 0) {
+            printf("Creating output directory...\n");
+            mkdir("output", 0755);
+            printf("✓ Output directory created\n");
+        } else {
+            printf("✓ Output directory already exists\n");
+        }
+    }
 
     if (GGWave_init(playbackId, captureId, payloadLength, 0.0f, useDSS) == false) {
         fprintf(stderr, "Failed to initialize GGWave\n");
@@ -175,7 +188,8 @@ int main(int argc, char** argv) {
                     ggWave->init(input.size(), input.data(), GGWave::TxProtocolId(txProtocolId), 100);
 
                     if (saveToFile) {
-                        printf("Step 0: Preparing to save waveform to file: %s\n", saveFilename.c_str());
+                        std::string fullSavePath = "output/" + saveFilename;
+                        printf("Step 0: Preparing to save waveform to file: %s\n", fullSavePath.c_str());
                         fflush(stdout);
                         
                         if (saveFilename.empty()) {
@@ -239,7 +253,7 @@ int main(int argc, char** argv) {
     printf("Step 6: Opening file for writing...\n");
     fflush(stdout);
     
-    std::ofstream file(saveFilename, std::ios::binary);
+    std::ofstream file(fullSavePath, std::ios::binary);
     if (file.is_open()) {
         printf("Step 7: Writing %u bytes to file...\n", actualSize);
         fflush(stdout);
@@ -247,7 +261,7 @@ int main(int argc, char** argv) {
         // 注意：这里改成 write(dataToWrite, ...)
         file.write(dataToWrite, actualSize); 
         file.close();
-        printf("✓ Saved normalized waveform to file: %s (%u bytes)\n", saveFilename.c_str(), actualSize);
+        printf("✓ Saved normalized waveform to file: %s (%u bytes)\n", fullSavePath.c_str(), actualSize);
         fflush(stdout);
         
         // 打印新的 Hex 用于验证 (你会发现数值变大了，比如变成 30 00, A0 00 等)
@@ -260,49 +274,47 @@ int main(int argc, char** argv) {
                                     printf("Step 8: Opening file for reading...\n");
                                     fflush(stdout);
                                     
-                                    std::ifstream readFile(saveFilename, std::ios::binary);
+                                    std::ifstream readFile(fullSavePath, std::ios::binary);
                                     if (readFile.is_open()) {
                                         std::vector<char> loadedWaveform(actualSize);
                                         readFile.read(loadedWaveform.data(), actualSize);
                                         readFile.close();
-                                        printf("✓ Loaded waveform from file: %s (%zu bytes)\n", saveFilename.c_str(), loadedWaveform.size());
+                                        printf("✓ Loaded waveform from file: %s (%zu bytes)\n", fullSavePath.c_str(), loadedWaveform.size());
                                         fflush(stdout);
 
                                         printf("Step 9: Creating new GGWave instance for decoding...\n");
                                         fflush(stdout);
                                         
-                                        if (!ggWaveDecode) {
-                                            printf("Step 9.1: Configuring Rx protocol %d\n", txProtocolId);
-                                            fflush(stdout);
-                                            
-                                            GGWave::Protocols::rx().only(GGWave::TxProtocolId(txProtocolId));
-                                            
-                                            printf("Step 9.2: Creating GGWave decode instance\n");
-                                            fflush(stdout);
-                                            
-                                            GGWave::Parameters parameters = ggWave->getDefaultParameters();
-                                            parameters.operatingMode = GGWAVE_OPERATING_MODE_RX;
-                                            parameters.payloadLength = payloadLength;
-                                            parameters.sampleRateInp = 44100.0f;
-                                            parameters.sampleRateOut = 44100.0f;
-                                            parameters.sampleRate = 44100.0f;
-                                            parameters.samplesPerFrame = 1024;
-                                            parameters.soundMarkerThreshold = 1.0f;
-                                            parameters.sampleFormatInp = GGWave::SampleFormat::GGWAVE_SAMPLE_FORMAT_I16;
-                                            parameters.sampleFormatOut = GGWave::SampleFormat::GGWAVE_SAMPLE_FORMAT_I16;
-                                            ggWaveDecode = std::make_shared<GGWave>(parameters);
-                                            
-                                            printf("Step 9.3: Calling prepare() on decode instance\n");
-                                            fflush(stdout);
-                                            
-                                            ggWaveDecode->prepare(parameters, true);
-                                            
-                                            printf("Step 9.5: GGWave decode instance created and prepared\n");
-                                            printf("Step 9.6: payloadLength = %d\n", parameters.payloadLength);
-                                            printf("Step 9.7: sampleFormatInp = %d (GGWAVE_SAMPLE_FORMAT_I16 = %d)\n", 
-                                                   parameters.sampleFormatInp, GGWave::SampleFormat::GGWAVE_SAMPLE_FORMAT_I16);
-                                            fflush(stdout);
-                                        }
+                                        printf("Step 9.1: Configuring Rx protocol %d\n", txProtocolId);
+                                        fflush(stdout);
+                                        
+                                        GGWave::Protocols::rx().only(GGWave::TxProtocolId(txProtocolId));
+                                        
+                                        printf("Step 9.2: Creating GGWave decode instance\n");
+                                        fflush(stdout);
+                                        
+                                        GGWave::Parameters parameters = ggWave->getDefaultParameters();
+                                        parameters.operatingMode = GGWAVE_OPERATING_MODE_RX;
+                                        parameters.payloadLength = payloadLength;
+                                        parameters.sampleRateInp = 44100.0f;
+                                        parameters.sampleRateOut = 44100.0f;
+                                        parameters.sampleRate = 44100.0f;
+                                        parameters.samplesPerFrame = 1024;
+                                        parameters.soundMarkerThreshold = 1.0f;
+                                        parameters.sampleFormatInp = GGWave::SampleFormat::GGWAVE_SAMPLE_FORMAT_I16;
+                                        parameters.sampleFormatOut = GGWave::SampleFormat::GGWAVE_SAMPLE_FORMAT_I16;
+                                        ggWaveDecode = std::make_shared<GGWave>(parameters);
+                                        
+                                        printf("Step 9.3: Calling prepare() on decode instance\n");
+                                        fflush(stdout);
+                                        
+                                        ggWaveDecode->prepare(parameters, true);
+                                        
+                                        printf("Step 9.5: GGWave decode instance created and prepared\n");
+                                        printf("Step 9.6: payloadLength = %d\n", parameters.payloadLength);
+                                        printf("Step 9.7: sampleFormatInp = %d (GGWAVE_SAMPLE_FORMAT_I16 = %d)\n", 
+                                               parameters.sampleFormatInp, GGWave::SampleFormat::GGWAVE_SAMPLE_FORMAT_I16);
+                                        fflush(stdout);
                                         
                                         printf("Step 10: Decoding waveform...\n");
                                         fflush(stdout);
