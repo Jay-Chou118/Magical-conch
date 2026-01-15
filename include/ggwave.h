@@ -422,7 +422,7 @@ class GGWave {
 public:
     static constexpr auto kSampleRateMin               = 1000.0f;
     static constexpr auto kSampleRateMax               = 96000.0f;
-    static constexpr auto kDefaultSampleRate           = 48000.0f;
+    static constexpr auto kDefaultSampleRate           = 44100.0f;
     static constexpr auto kDefaultSamplesPerFrame      = 1024;
     static constexpr auto kDefaultVolume               = 10;
     static constexpr auto kDefaultSoundMarkerThreshold = 3.0f;
@@ -432,7 +432,7 @@ public:
     static constexpr auto kMaxDataSize                 = 256;
     static constexpr auto kMaxLengthVariable           = 140;
     static constexpr auto kMaxLengthFixed              = 64;
-    static constexpr auto kMaxSpectrumHistory          = 4;
+    static constexpr auto kMaxSpectrumHistory          = 8;
     static constexpr auto kMaxRecordedFrames           = 2048;
 
     using Parameters    = ggwave_Parameters;
@@ -522,10 +522,9 @@ public:
                 protocols.data[GGWAVE_PROTOCOL_AUDIBLE_FAST]       = { GGWAVE_PSTR("Fast"),         40,  6, 3, 1, true, };
                 protocols.data[GGWAVE_PROTOCOL_AUDIBLE_FASTEST]    = { GGWAVE_PSTR("Fastest"),      40,  3, 3, 1, true, };
  
-                //迎合需求
-                protocols.data[GGWAVE_PROTOCOL_ULTRASOUND_NORMAL]  = { GGWAVE_PSTR("[U] Normal"),   437, 9, 3, 1, true, };
-                protocols.data[GGWAVE_PROTOCOL_ULTRASOUND_FAST]    = { GGWAVE_PSTR("[U] Fast"),     437, 6, 3, 1, true, };
-                protocols.data[GGWAVE_PROTOCOL_ULTRASOUND_FASTEST] = { GGWAVE_PSTR("[U] Fastest"),  437, 3, 3, 1, true, };
+                protocols.data[GGWAVE_PROTOCOL_ULTRASOUND_NORMAL]  = { GGWAVE_PSTR("[U] Normal"),   480, 9, 3, 1, true, };
+                protocols.data[GGWAVE_PROTOCOL_ULTRASOUND_FAST]    = { GGWAVE_PSTR("[U] Fast"),     480, 6, 3, 1, true, };
+                protocols.data[GGWAVE_PROTOCOL_ULTRASOUND_FASTEST] = { GGWAVE_PSTR("[U] Fastest"),  480, 3, 3, 1, true, };
 #endif
                 protocols.data[GGWAVE_PROTOCOL_DT_NORMAL]          = { GGWAVE_PSTR("[DT] Normal"),  24,  9, 1, 1, true, };
                 protocols.data[GGWAVE_PROTOCOL_DT_FAST]            = { GGWAVE_PSTR("[DT] Fast"),    24,  6, 1, 1, true, };

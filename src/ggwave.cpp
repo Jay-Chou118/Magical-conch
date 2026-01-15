@@ -493,8 +493,7 @@ bool GGWave::prepare(const Parameters & parameters, bool allocate) {
     m_nBitsInMarker        = 16;
     m_nMarkerFrames        = parameters.payloadLength > 0 ? 0 : kDefaultMarkerFrames;
     m_encodedDataOffset    = parameters.payloadLength > 0 ? 0 : kDefaultEncodedDataOffset;
-    // m_soundMarkerThreshold = parameters.soundMarkerThreshold;
-     m_soundMarkerThreshold = parameters.soundMarkerThreshold > 0 ? parameters.soundMarkerThreshold : 2.0f; // 从3.0f降低到2.0f
+    m_soundMarkerThreshold = parameters.soundMarkerThreshold > 0 ? parameters.soundMarkerThreshold : 1.5f;
     m_isFixedPayloadLength = parameters.payloadLength > 0;
     m_payloadLength        = parameters.payloadLength;
     m_isRxEnabled          = parameters.operatingMode & GGWAVE_OPERATING_MODE_RX;
@@ -1781,20 +1780,20 @@ void GGWave::decode_variable() {
                 continue;
             }
 
-            int nDetectedMarkerBits = m_nBitsInMarker;
+            int nDetectedMarkerBits = 0;
 
             for (int i = 0; i < m_nBitsInMarker; ++i) {
                 double freq = bitFreq(protocol, i);
                 int bin = round(freq*m_ihzPerSample);
 
                 if (i%2 == 0) {
-                    if (m_rx.spectrum[bin] <= m_soundMarkerThreshold*m_rx.spectrum[bin + m_freqDelta_bin]) --nDetectedMarkerBits;
+                    if (m_rx.spectrum[bin] > m_soundMarkerThreshold*m_rx.spectrum[bin + m_freqDelta_bin]) ++nDetectedMarkerBits;
                 } else {
-                    if (m_rx.spectrum[bin] >= m_soundMarkerThreshold*m_rx.spectrum[bin + m_freqDelta_bin]) --nDetectedMarkerBits;
+                    if (m_rx.spectrum[bin] < m_soundMarkerThreshold*m_rx.spectrum[bin + m_freqDelta_bin]) ++nDetectedMarkerBits;
                 }
             }
 
-            if (nDetectedMarkerBits == m_nBitsInMarker) {
+            if (nDetectedMarkerBits >= m_nBitsInMarker - 2) {
                 m_rx.markerFreqStart = protocol.freqStart;
                 isReceiving = true;
                 break;
@@ -1836,20 +1835,20 @@ void GGWave::decode_variable() {
                 continue;
             }
 
-            int nDetectedMarkerBits = m_nBitsInMarker;
+            int nDetectedMarkerBits = 0;
 
             for (int i = 0; i < m_nBitsInMarker; ++i) {
                 double freq = bitFreq(protocol, i);
                 int bin = round(freq*m_ihzPerSample);
 
                 if (i%2 == 0) {
-                    if (m_rx.spectrum[bin] >= m_soundMarkerThreshold*m_rx.spectrum[bin + m_freqDelta_bin]) nDetectedMarkerBits--;
+                    if (m_rx.spectrum[bin] >= m_soundMarkerThreshold*m_rx.spectrum[bin + m_freqDelta_bin]) nDetectedMarkerBits++;
                 } else {
-                    if (m_rx.spectrum[bin] <= m_soundMarkerThreshold*m_rx.spectrum[bin + m_freqDelta_bin]) nDetectedMarkerBits--;
+                    if (m_rx.spectrum[bin] <= m_soundMarkerThreshold*m_rx.spectrum[bin + m_freqDelta_bin]) nDetectedMarkerBits++;
                 }
             }
 
-            if (nDetectedMarkerBits == m_nBitsInMarker) {
+            if (nDetectedMarkerBits >= m_nBitsInMarker - 2) {
                 isEnded = true;
                 break;
             }

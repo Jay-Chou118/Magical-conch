@@ -19,7 +19,17 @@ std::map<std::string, std::string> parseCmdArguments(int argc, char ** argv) {
     for (int i = 1; i < last; ++i) {
         if (argv[i][0] == '-') {
             if (strlen(argv[i]) > 1) {
-                res[std::string(1, argv[i][1])] = strlen(argv[i]) > 2 ? argv[i] + 2 : "";
+                char key = argv[i][1];
+                std::string value = "";
+                
+                if (strlen(argv[i]) > 2) {
+                    value = argv[i] + 2;
+                } else if (i + 1 < last && argv[i + 1][0] != '-') {
+                    value = argv[i + 1];
+                    i++;
+                }
+                
+                res[std::string(1, key)] = value;
             }
         }
     }

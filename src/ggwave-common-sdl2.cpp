@@ -163,7 +163,7 @@ bool GGWave_init(
         captureSpec = g_obtainedSpecOut;
         captureSpec.freq = GGWave::kDefaultSampleRate + sampleRateOffset;
         captureSpec.format = AUDIO_F32SYS;
-        captureSpec.samples = 1024;
+        captureSpec.samples = 512;
 
         SDL_zero(g_obtainedSpecInp);
 
